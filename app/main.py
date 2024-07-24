@@ -16,7 +16,13 @@ def main():
     request_lines = request.split("\r\n")
     _, target, _ = request_lines[0].split()
 
-    response = "HTTP/1.1 200 OK\r\n\r\n" if target == "/" else "HTTP/1.1 404 Not Found\r\n\r\n"
+    if target.startswith("/echo/"):
+        echo_str = target[6:]
+        response = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(echo_str)}\r\n\r\n{echo_str}"
+    elif target == "/":
+        response = "HTTP/1.1 200 OK\r\n\r\n"
+    else:
+        response = "HTTP/1.1 404 Not Found\r\n\r\n"
     client_socket.sendall(response.encode())
 
 
