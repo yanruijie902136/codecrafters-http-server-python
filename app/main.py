@@ -153,7 +153,6 @@ def main():
             else:
                 request = HttpRequest.recvFromSocket(readSocket)
                 response = HttpResponse.handleRequest(request)
-                print(response)
                 response.sendToSocket(readSocket)
 
                 readSocket.close()
