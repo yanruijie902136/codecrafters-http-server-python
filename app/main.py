@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
+import select
 import socket
 
 
@@ -108,16 +109,25 @@ def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!")
 
-    # Uncomment this to pass the first stage
-
     serverSocket = socket.create_server(("localhost", 4221), reuse_port=True)
-    clientSocket, _ = serverSocket.accept() # wait for client
 
-    request = HttpRequest.recvFromSocket(clientSocket)
-    print(request)
-    response = HttpResponse.handleRequest(request)
-    print(response)
-    response.sendToSocket(clientSocket)
+    activeSockets = set([serverSocket])
+    while True:
+        readSockets, *_ = select.select(activeSockets, [], [])
+
+        for readSocket in readSockets:
+            if readSocket == serverSocket:
+                clientSocket, _ = serverSocket.accept()
+                activeSockets.add(clientSocket)
+            else:
+                request = HttpRequest.recvFromSocket(readSocket)
+                print(request)
+                response = HttpResponse.handleRequest(request)
+                print(response)
+                response.sendToSocket(readSocket)
+
+                readSocket.close()
+                activeSockets.remove(readSocket)
 
 
 if __name__ == "__main__":
