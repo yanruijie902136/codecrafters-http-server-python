@@ -90,6 +90,8 @@ class HttpResponse:
         self.__body = request.target[6:]
         self.__headers["Content-Type"] = "text/plain"
         self.__headers["Content-Length"] = len(self.__body)
+        if request.headers.get("Accept-Encoding") == "gzip":
+            self.__headers["Content-Encoding"] = "gzip"
 
     def __handleFiles(self, request: HttpRequest):
         filePath = sys.argv[2] + "/" + request.target[7:]
