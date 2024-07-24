@@ -7,9 +7,6 @@ import socket
 import sys
 
 
-rootDirectory = ""
-
-
 class HttpRequest:
     def __init__(self):
         self.__method = ""
@@ -96,7 +93,7 @@ class HttpResponse:
 
     def __handleFiles(self, request: HttpRequest):
         try:
-            filePath = request.target[7:]
+            rootDirectory, filePath = sys.argv[2], request.target[7:]
             with open(f"{rootDirectory}/{filePath}", "r") as fp:
                 self.__body = fp.read()
             self.__status = "200 OK"
@@ -104,7 +101,6 @@ class HttpResponse:
             self.__headers["Content-Length"] = len(self.__body)
         except IOError:
             self.__status = "404 Not Found"
-            return
 
     def __handleUrlPath(self, request: HttpRequest):
         self.__status = "200 OK" if request.target == "/" else "404 Not Found"
@@ -131,7 +127,6 @@ def main():
     if len(sys.argv) < 3:
         print("Usage: ./your_program.sh --directory <rootDirectory>", file=sys.stderr)
         exit(1)
-    rootDirectory = sys.argv[2]
 
     serverSocket = socket.create_server(("localhost", 4221), reuse_port=True)
     activeSockets = set([serverSocket])
