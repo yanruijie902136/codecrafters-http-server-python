@@ -95,7 +95,7 @@ class HttpResponse:
             encodingSchemes = request.headers["Accept-Encoding"].split(", ")
             if "gzip" in encodingSchemes:
                 self.__headers["Content-Encoding"] = "gzip"
-                self.__body = gzip.compress(self.__body)
+                self.__body = gzip.compress(self.__body.encode())
                 self.__headers["Content-Length"] = len(self.__body)
 
     def __handleFiles(self, request: HttpRequest):
