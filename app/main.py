@@ -92,15 +92,22 @@ class HttpResponse:
         self.__headers["Content-Length"] = len(self.__body)
 
     def __handleFiles(self, request: HttpRequest):
-        try:
-            rootDirectory, filePath = sys.argv[2], request.target[7:]
-            with open(f"{rootDirectory}/{filePath}", "r") as fp:
-                self.__body = fp.read()
-            self.__status = "200 OK"
-            self.__headers["Content-Type"] = "application/octet-stream"
-            self.__headers["Content-Length"] = len(self.__body)
-        except IOError:
-            self.__status = "404 Not Found"
+        filePath = sys.argv[2] + "/" + request.target[7:]
+
+        match request.method:
+            case "POST":
+                with open(filePath, "w") as fp:
+                    fp.write(request.body)
+                self.__status = "201 Created"
+            case "GET":
+                try:
+                    with open(filePath, "r") as fp:
+                        self.__body = fp.read()
+                    self.__status = "200 OK"
+                    self.__headers["Content-Type"] = "application/octet-stream"
+                    self.__headers["Content-Length"] = len(self.__body)
+                except IOError:
+                    self.__status = "404 Not Found"
 
     def __handleUrlPath(self, request: HttpRequest):
         self.__status = "200 OK" if request.target == "/" else "404 Not Found"
