@@ -50,7 +50,7 @@ class HttpRequest:
     def __str__(self):
         return (
             f"{self.__method} {self.__target} {self.__version}\r\n" +
-            "".join([f"{key}: {value}\r\n" for key, value in self.__headers]) +
+            "".join([f"{key}: {value}\r\n" for key, value in self.__headers.items()]) +
             "\r\n" +
             self.__body
         )
@@ -98,7 +98,7 @@ class HttpResponse:
     def __str__(self):
         return (
             f"{self.__version} {self.__status}\r\n" +
-            "".join([f"{key}: {value}\r\n" for key, value in self.__headers]) +
+            "".join([f"{key}: {value}\r\n" for key, value in self.__headers.items()]) +
             "\r\n" +
             self.__body
         )
