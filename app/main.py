@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
+import os
 import select
 import socket
+import sys
+
+
+rootDirectory = ""
 
 
 class HttpRequest:
@@ -76,6 +81,8 @@ class HttpResponse:
             response.__handleUserAgent(request)
         elif request.target.startswith("/echo/"):
             response.__handleEcho(request)
+        elif request.target.startswith("/files/"):
+            response.__handleFiles(request)
         else:
             response.__handleUrlPath(request)
 
@@ -86,6 +93,18 @@ class HttpResponse:
         self.__body = request.target[6:]
         self.__headers["Content-Type"] = "text/plain"
         self.__headers["Content-Length"] = len(self.__body)
+
+    def __handleFiles(self, request: HttpRequest):
+        try:
+            filePath = request.target[7:]
+            with open(f"{rootDirectory}/{filePath}", "r") as fp:
+                self.__body = fp.read()
+            self.__status = "200 OK"
+            self.__headers["Content-Type"] = "application/octet-stream"
+            self.__headers["Content-Length"] = len(self.__body)
+        except IOError:
+            self.__status = "404 Not Found"
+            return
 
     def __handleUrlPath(self, request: HttpRequest):
         self.__status = "200 OK" if request.target == "/" else "404 Not Found"
@@ -109,8 +128,12 @@ def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!")
 
-    serverSocket = socket.create_server(("localhost", 4221), reuse_port=True)
+    if len(sys.argv) < 3:
+        print("Usage: ./your_program.sh --directory <rootDirectory>", file=sys.stderr)
+        exit(1)
+    rootDirectory = sys.argv[2]
 
+    serverSocket = socket.create_server(("localhost", 4221), reuse_port=True)
     activeSockets = set([serverSocket])
     while True:
         readSockets, *_ = select.select(activeSockets, [], [])
