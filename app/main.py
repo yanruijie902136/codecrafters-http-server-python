@@ -42,6 +42,14 @@ class HTTPStatusLine:
     def encode(self) -> bytes:
         return f"HTTP/1.1 {self.status_code} {self.reason_phrase}".encode()
 
+    @classmethod
+    def ok(cls) -> typing.Self:
+        return cls(200, "OK")
+
+    @classmethod
+    def not_found(cls) -> typing.Self:
+        return cls(404, "Not Found")
+
 
 class Stringifiable(typing.Protocol):
     def __str__(self) -> str:
@@ -99,10 +107,7 @@ class HTTPServer:
             if request.request_line.target.startswith("/echo/"):
                 body = request.request_line.target[6:]
                 response = HTTPResponse(
-                    status_line=HTTPStatusLine(
-                        status_code=200,
-                        reason_phrase="OK",
-                    ),
+                    status_line=HTTPStatusLine.ok(),
                     headers={
                         "Content-Type": "text/plain",
                         "Content-Length": len(body),
@@ -110,9 +115,9 @@ class HTTPServer:
                     body=body,
                 )
             elif request.request_line.target == "/":
-                response = HTTPResponse(status_line=HTTPStatusLine(status_code=200, reason_phrase="OK"))
+                response = HTTPResponse(status_line=HTTPStatusLine.ok())
             else:
-                response = HTTPResponse(status_line=HTTPStatusLine(status_code=404, reason_phrase="Not Found"))
+                response = HTTPResponse(status_line=HTTPStatusLine.not_found())
 
             await connection.send_response(response)
 
