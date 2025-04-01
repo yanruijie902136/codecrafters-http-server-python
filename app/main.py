@@ -40,7 +40,7 @@ class HTTPStatusLine:
     reason_phrase: str = ""
 
     def encode(self) -> bytes:
-        return f"HTTP/1.1 {self.status_code} {self.reason_phrase}".encode()
+        return f"HTTP/1.1 {self.status_code} {self.reason_phrase}\r\n".encode()
 
     @classmethod
     def ok(cls) -> typing.Self:
@@ -63,12 +63,12 @@ class HTTPResponse:
     body: str = ""
 
     def encode(self) -> bytes:
-        return b"\r\n".join([
+        return b"".join([
             self.status_line.encode(),
-            b"\r\n".join(
-                f"{name}: {value}".encode() for name, value in self.headers.items()
+            b"".join(
+                f"{name}: {value}\r\n".encode() for name, value in self.headers.items()
             ),
-            b"",
+            b"\r\n",
             self.body.encode(),
         ])
 
@@ -104,7 +104,17 @@ class HTTPServer:
         async with connection:
             request = await connection.recv_request()
 
-            if request.request_line.target.startswith("/echo/"):
+            if request.request_line.target == "/user-agent":
+                body = request.headers["User-Agent"]
+                response = HTTPResponse(
+                    status_line=HTTPStatusLine.ok(),
+                    headers={
+                        "Content-Type": "text/plain",
+                        "Content-Length": len(body),
+                    },
+                    body=body,
+                )
+            elif request.request_line.target.startswith("/echo/"):
                 body = request.request_line.target[6:]
                 response = HTTPResponse(
                     status_line=HTTPStatusLine.ok(),
