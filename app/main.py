@@ -124,55 +124,73 @@ class HTTPServer:
             await connection.send_response(response)
 
     def _handle_request(self, request: HTTPRequest) -> HTTPResponse:
-        if request.request_line.target.startswith("/files/"):
-            filename = request.request_line.target[7:]
-            path = os.path.join(self._directory, filename)
-
-            if request.request_line.method == "POST":
-                with open(path, mode="w") as f:
-                    f.write(request.body)
-                return HTTPResponse(status_line=HTTPStatusLine.created())
-
-            try:
-                with open(path, mode="r") as f:
-                    body = f.read()
-            except FileNotFoundError:
-                return HTTPResponse(status_line=HTTPStatusLine.not_found())
-            return HTTPResponse(
-                status_line=HTTPStatusLine.ok(),
-                headers={
-                    "Content-Type": "application/octet-stream",
-                    "Content-Length": len(body),
-                },
-                body=body,
-            )
-
-        if request.request_line.target == "/user-agent":
-            body = request.headers["User-Agent"]
-            return HTTPResponse(
-                status_line=HTTPStatusLine.ok(),
-                headers={
-                    "Content-Type": "text/plain",
-                    "Content-Length": len(body),
-                },
-                body=body,
-            )
-
         if request.request_line.target.startswith("/echo/"):
-            body = request.request_line.target[6:]
-            return HTTPResponse(
-                status_line=HTTPStatusLine.ok(),
-                headers={
-                    "Content-Type": "text/plain",
-                    "Content-Length": len(body),
-                },
-                body=body,
-            )
+            return self._handle_echo_endpoint(request)
+        if request.request_line.target.startswith("/files/"):
+            return self._handle_files_endpoint(request)
+        if request.request_line.target == "/user-agent":
+            return self._handle_user_agent_endpoint(request)
 
         if request.request_line.target == "/":
             return HTTPResponse(status_line=HTTPStatusLine.ok())
-
         return HTTPResponse(status_line=HTTPStatusLine.not_found())
+
+    def _handle_echo_endpoint(self, request: HTTPRequest) -> HTTPResponse:
+        compression_schemes = request.headers.get("Accept-Encoding")
+        if compression_schemes is not None:
+            compression_schemes = compression_schemes.split(",")
+        else:
+            compression_schemes = []
+
+        body = request.request_line.target[6:]
+
+        headers = {
+            "Content-Type": "text/plain",
+            "Content-Length": len(body),
+        }
+        if "gzip" in compression_schemes:
+            headers["Content-Encoding"] = "gzip"
+
+        return HTTPResponse(
+            status_line=HTTPStatusLine.ok(),
+            headers=headers,
+            body=body,
+        )
+
+    def _handle_files_endpoint(self, request: HTTPRequest) -> HTTPResponse:
+        filename = request.request_line.target[7:]
+        path = os.path.join(self._directory, filename)
+
+        if request.request_line.method == "POST":
+            with open(path, mode="w") as f:
+                f.write(request.body)
+            return HTTPResponse(status_line=HTTPStatusLine.created())
+
+        try:
+            with open(path, mode="r") as f:
+                body = f.read()
+        except FileNotFoundError:
+            return HTTPResponse(status_line=HTTPStatusLine.not_found())
+
+        return HTTPResponse(
+            status_line=HTTPStatusLine.ok(),
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Content-Length": len(body),
+            },
+            body=body,
+        )
+
+    def _handle_user_agent_endpoint(self, request: HTTPRequest) -> HTTPResponse:
+        body = request.headers["User-Agent"]
+        return HTTPResponse(
+            status_line=HTTPStatusLine.ok(),
+            headers={
+                "Content-Type": "text/plain",
+                "Content-Length": len(body),
+            },
+            body=body,
+        )
 
 
 def parse_args() -> argparse.Namespace:
