@@ -1,5 +1,7 @@
+import argparse
 import asyncio
 import dataclasses
+import os
 import typing
 
 
@@ -94,6 +96,9 @@ class HTTPClientConnection:
 
 
 class HTTPServer:
+    def __init__(self, directory: str) -> None:
+        self._directory = directory
+
     async def start(self) -> None:
         server = await asyncio.start_server(self._client_connected_cb, host="localhost", port=4221, reuse_port=True)
         async with server:
@@ -103,34 +108,62 @@ class HTTPServer:
         connection = HTTPClientConnection(reader, writer)
         async with connection:
             request = await connection.recv_request()
-
-            if request.request_line.target == "/user-agent":
-                body = request.headers["User-Agent"]
-                response = HTTPResponse(
-                    status_line=HTTPStatusLine.ok(),
-                    headers={
-                        "Content-Type": "text/plain",
-                        "Content-Length": len(body),
-                    },
-                    body=body,
-                )
-            elif request.request_line.target.startswith("/echo/"):
-                body = request.request_line.target[6:]
-                response = HTTPResponse(
-                    status_line=HTTPStatusLine.ok(),
-                    headers={
-                        "Content-Type": "text/plain",
-                        "Content-Length": len(body),
-                    },
-                    body=body,
-                )
-            elif request.request_line.target == "/":
-                response = HTTPResponse(status_line=HTTPStatusLine.ok())
-            else:
-                response = HTTPResponse(status_line=HTTPStatusLine.not_found())
-
+            response = self._handle_request(request)
             await connection.send_response(response)
+
+    def _handle_request(self, request: HTTPRequest) -> HTTPResponse:
+        if request.request_line.target.startswith("/files/"):
+            filename = request.request_line.target[7:]
+            try:
+                with open(os.path.join(self._directory, filename), mode="r") as f:
+                    body = f.read()
+            except FileNotFoundError:
+                return HTTPResponse(status_line=HTTPStatusLine.not_found())
+            return HTTPResponse(
+                status_line=HTTPStatusLine.ok(),
+                headers={
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": len(body),
+                },
+                body=body,
+            )
+        elif request.request_line.target == "/user-agent":
+            body = request.headers["User-Agent"]
+            return HTTPResponse(
+                status_line=HTTPStatusLine.ok(),
+                headers={
+                    "Content-Type": "text/plain",
+                    "Content-Length": len(body),
+                },
+                body=body,
+            )
+        elif request.request_line.target.startswith("/echo/"):
+            body = request.request_line.target[6:]
+            return HTTPResponse(
+                status_line=HTTPStatusLine.ok(),
+                headers={
+                    "Content-Type": "text/plain",
+                    "Content-Length": len(body),
+                },
+                body=body,
+            )
+        elif request.request_line.target == "/":
+            return HTTPResponse(status_line=HTTPStatusLine.ok())
+        else:
+            return HTTPResponse(status_line=HTTPStatusLine.not_found())
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="CodeCrafters - Build your own HTTP server")
+    parser.add_argument("--directory", type=str, default="")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    server = HTTPServer(directory=args.directory)
+    asyncio.run(server.start())
 
 
 if __name__ == "__main__":
-    asyncio.run(HTTPServer().start())
+    main()
