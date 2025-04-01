@@ -16,24 +16,65 @@ class HTTPRequestLine:
         return cls(method, target, version)
 
 
+@dataclasses.dataclass(frozen=True)
+class HTTPRequest:
+    request_line: HTTPRequestLine
+    headers: dict[str, str]
+
+    @classmethod
+    async def parse(cls, reader: asyncio.StreamReader) -> typing.Self:
+        request_line = await HTTPRequestLine.parse(reader)
+        headers = {}
+        while True:
+            data = (await reader.readuntil(b"\r\n"))[:-2].decode()
+            if not data:
+                return cls(request_line, headers)
+            i = data.index(":")
+            name, value = data[:i], data[i+1:].strip()
+            headers[name] = value
+
+
+@dataclasses.dataclass(frozen=True)
+class HTTPStatusLine:
+    status_code: int
+    reason_phrase: str = ""
+
+    def encode(self) -> bytes:
+        return f"HTTP/1.1 {self.status_code} {self.reason_phrase}".encode()
+
+
+class Stringifiable(typing.Protocol):
+    def __str__(self) -> str:
+        ...
+
+
+@dataclasses.dataclass(frozen=True)
+class HTTPResponse:
+    status_line: HTTPStatusLine
+    headers: dict[str, Stringifiable] = dataclasses.field(default_factory=dict)
+    body: str = ""
+
+    def encode(self) -> bytes:
+        return b"\r\n".join([
+            self.status_line.encode(),
+            b"\r\n".join(
+                f"{name}: {value}".encode() for name, value in self.headers.items()
+            ),
+            b"",
+            self.body.encode(),
+        ])
+
+
 class HTTPClientConnection:
     def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         self._reader = reader
         self._writer = writer
 
-    async def recv_request(self) -> tuple[HTTPRequestLine, dict[str, str]]:
-        request_line = await HTTPRequestLine.parse(self._reader)
-        headers = {}
-        while True:
-            data = (await self._reader.readuntil(b"\r\n"))[:-2].decode()
-            if not data:
-                return request_line, headers
-            i = data.index(":")
-            field_name, field_value = data[:i], data[i+1:].strip()
-            headers[field_name] = field_value
+    async def recv_request(self) -> HTTPRequest:
+        return await HTTPRequest.parse(self._reader)
 
-    async def send_response(self, response: bytes) -> None:
-        self._writer.write(response)
+    async def send_response(self, response: HTTPResponse) -> None:
+        self._writer.write(response.encode())
         await self._writer.drain()
 
     async def __aenter__(self) -> None:
@@ -53,11 +94,26 @@ class HTTPServer:
     async def _client_connected_cb(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         connection = HTTPClientConnection(reader, writer)
         async with connection:
-            request_line, _ = await connection.recv_request()
-            if request_line.target == "/":
-                response = b"HTTP/1.1 200 OK\r\n\r\n"
+            request = await connection.recv_request()
+
+            if request.request_line.target.startswith("/echo/"):
+                body = request.request_line.target[6:]
+                response = HTTPResponse(
+                    status_line=HTTPStatusLine(
+                        status_code=200,
+                        reason_phrase="OK",
+                    ),
+                    headers={
+                        "Content-Type": "text/plain",
+                        "Content-Length": len(body),
+                    },
+                    body=body,
+                )
+            elif request.request_line.target == "/":
+                response = HTTPResponse(status_line=HTTPStatusLine(status_code=200, reason_phrase="OK"))
             else:
-                response = b"HTTP/1.1 404 Not Found\r\n\r\n"
+                response = HTTPResponse(status_line=HTTPStatusLine(status_code=404, reason_phrase="Not Found"))
+
             await connection.send_response(response)
 
 
