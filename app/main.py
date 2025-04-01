@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import dataclasses
+import gzip
 import os
 import typing
 
@@ -22,7 +23,7 @@ class HTTPRequestLine:
 class HTTPRequest:
     request_line: HTTPRequestLine
     headers: dict[str, str]
-    body: str
+    body: bytes
 
     @classmethod
     async def parse(cls, reader: asyncio.StreamReader) -> typing.Self:
@@ -37,9 +38,9 @@ class HTTPRequest:
             name, value = data[:i], data[i+1:].strip()
             headers[name] = value
 
-        body = ""
+        body = b""
         if (value := headers.get("Content-Length")) is not None:
-            body = (await reader.readexactly(int(value))).decode()
+            body = await reader.readexactly(int(value))
 
         return cls(request_line, headers, body)
 
@@ -74,7 +75,7 @@ class Stringifiable(typing.Protocol):
 class HTTPResponse:
     status_line: HTTPStatusLine
     headers: dict[str, Stringifiable] = dataclasses.field(default_factory=dict)
-    body: str = ""
+    body: bytes = b""
 
     def encode(self) -> bytes:
         return b"".join([
@@ -83,7 +84,7 @@ class HTTPResponse:
                 f"{name}: {value}\r\n".encode() for name, value in self.headers.items()
             ),
             b"\r\n",
-            self.body.encode(),
+            self.body,
         ])
 
 
@@ -142,14 +143,15 @@ class HTTPServer:
         else:
             compression_schemes = []
 
-        body = request.request_line.target[6:]
+        body = request.request_line.target[6:].encode()
 
         headers = {
             "Content-Type": "text/plain",
-            "Content-Length": len(body),
         }
         if "gzip" in compression_schemes:
             headers["Content-Encoding"] = "gzip"
+            body = gzip.compress(body)
+        headers["Content-Length"] = len(body)
 
         return HTTPResponse(
             status_line=HTTPStatusLine.ok(),
@@ -162,12 +164,12 @@ class HTTPServer:
         path = os.path.join(self._directory, filename)
 
         if request.request_line.method == "POST":
-            with open(path, mode="w") as f:
+            with open(path, mode="wb") as f:
                 f.write(request.body)
             return HTTPResponse(status_line=HTTPStatusLine.created())
 
         try:
-            with open(path, mode="r") as f:
+            with open(path, mode="rb") as f:
                 body = f.read()
         except FileNotFoundError:
             return HTTPResponse(status_line=HTTPStatusLine.not_found())
@@ -182,7 +184,7 @@ class HTTPServer:
         )
 
     def _handle_user_agent_endpoint(self, request: HTTPRequest) -> HTTPResponse:
-        body = request.headers["User-Agent"]
+        body = request.headers["User-Agent"].encode()
         return HTTPResponse(
             status_line=HTTPStatusLine.ok(),
             headers={
