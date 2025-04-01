@@ -138,7 +138,7 @@ class HTTPServer:
     def _handle_echo_endpoint(self, request: HTTPRequest) -> HTTPResponse:
         compression_schemes = request.headers.get("Accept-Encoding")
         if compression_schemes is not None:
-            compression_schemes = compression_schemes.split(",")
+            compression_schemes = compression_schemes.split(", ")
         else:
             compression_schemes = []
 
