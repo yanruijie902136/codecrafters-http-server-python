@@ -22,18 +22,26 @@ class HTTPRequestLine:
 class HTTPRequest:
     request_line: HTTPRequestLine
     headers: dict[str, str]
+    body: str
 
     @classmethod
     async def parse(cls, reader: asyncio.StreamReader) -> typing.Self:
         request_line = await HTTPRequestLine.parse(reader)
+
         headers = {}
         while True:
             data = (await reader.readuntil(b"\r\n"))[:-2].decode()
             if not data:
-                return cls(request_line, headers)
+                break
             i = data.index(":")
             name, value = data[:i], data[i+1:].strip()
             headers[name] = value
+
+        body = ""
+        if (value := headers.get("Content-Length")) is not None:
+            body = (await reader.readexactly(int(value))).decode()
+
+        return cls(request_line, headers, body)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -47,6 +55,10 @@ class HTTPStatusLine:
     @classmethod
     def ok(cls) -> typing.Self:
         return cls(200, "OK")
+
+    @classmethod
+    def created(cls) -> typing.Self:
+        return cls(201, "Created")
 
     @classmethod
     def not_found(cls) -> typing.Self:
@@ -114,8 +126,15 @@ class HTTPServer:
     def _handle_request(self, request: HTTPRequest) -> HTTPResponse:
         if request.request_line.target.startswith("/files/"):
             filename = request.request_line.target[7:]
+            path = os.path.join(self._directory, filename)
+
+            if request.request_line.method == "POST":
+                with open(path, mode="w") as f:
+                    f.write(request.body)
+                return HTTPResponse(status_line=HTTPStatusLine.created())
+
             try:
-                with open(os.path.join(self._directory, filename), mode="r") as f:
+                with open(path, mode="r") as f:
                     body = f.read()
             except FileNotFoundError:
                 return HTTPResponse(status_line=HTTPStatusLine.not_found())
@@ -127,7 +146,8 @@ class HTTPServer:
                 },
                 body=body,
             )
-        elif request.request_line.target == "/user-agent":
+
+        if request.request_line.target == "/user-agent":
             body = request.headers["User-Agent"]
             return HTTPResponse(
                 status_line=HTTPStatusLine.ok(),
@@ -137,7 +157,8 @@ class HTTPServer:
                 },
                 body=body,
             )
-        elif request.request_line.target.startswith("/echo/"):
+
+        if request.request_line.target.startswith("/echo/"):
             body = request.request_line.target[6:]
             return HTTPResponse(
                 status_line=HTTPStatusLine.ok(),
@@ -147,10 +168,11 @@ class HTTPServer:
                 },
                 body=body,
             )
-        elif request.request_line.target == "/":
+
+        if request.request_line.target == "/":
             return HTTPResponse(status_line=HTTPStatusLine.ok())
-        else:
-            return HTTPResponse(status_line=HTTPStatusLine.not_found())
+
+        return HTTPResponse(status_line=HTTPStatusLine.not_found())
 
 
 def parse_args() -> argparse.Namespace:
