@@ -120,9 +120,13 @@ class HTTPServer:
     async def _client_connected_cb(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         connection = HTTPClientConnection(reader, writer)
         async with connection:
-            while True:
+            close_connection = False
+            while not close_connection:
                 request = await connection.recv_request()
                 response = self._handle_request(request)
+                if request.headers.get("Connection") == "close":
+                    response.headers["Connection"] = "close"
+                    close_connection = True
                 await connection.send_response(response)
 
     def _handle_request(self, request: HTTPRequest) -> HTTPResponse:
