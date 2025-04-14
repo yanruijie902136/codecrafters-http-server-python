@@ -120,9 +120,10 @@ class HTTPServer:
     async def _client_connected_cb(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         connection = HTTPClientConnection(reader, writer)
         async with connection:
-            request = await connection.recv_request()
-            response = self._handle_request(request)
-            await connection.send_response(response)
+            while True:
+                request = await connection.recv_request()
+                response = self._handle_request(request)
+                await connection.send_response(response)
 
     def _handle_request(self, request: HTTPRequest) -> HTTPResponse:
         if request.request_line.target.startswith("/echo/"):
